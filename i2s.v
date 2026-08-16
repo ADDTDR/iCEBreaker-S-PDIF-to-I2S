@@ -21,45 +21,37 @@ endmodule
 module i2s_tx #(
     parameter integer SAMPLE_BITS = 16,
     parameter integer CHANNEL_BITS = 32,
-    parameter integer BCLK_HALF_FLOOR = 8,
-    parameter integer BCLK_HALF_REMAINDER = 0,
-    parameter integer BCLK_HALF_DENOMINATOR = 1
+    parameter [31:0] PHASE_INCREMENT = 32'h20c49ba6
 )(
     input  wire clk,
     input  wire signed [SAMPLE_BITS-1:0] sample_l,
     input  wire signed [SAMPLE_BITS-1:0] sample_r,
+    input  wire signed [31:0] rate_adjust,
     output reg  sample_req = 0,
     output reg  bclk = 0,
     output reg  lrclk = 0,
     output reg  sdata = 0
 );
-    // With the 96 MHz system clock, the default 8-cycle half-period produces
-    // a clock-coherent 6 MHz BCLK and 93.75 kHz LRCLK for 32-bit stereo slots.
+    // The phase accumulator generates a nominal 6.144 MHz BCLK and 96 kHz
+    // LRCLK from 96 MHz. rate_adjust permits slow source-rate tracking.
     localparam integer RIGHT_SLOT_FIRST = CHANNEL_BITS;
     localparam integer RIGHT_DATA_LAST = CHANNEL_BITS + SAMPLE_BITS - 1;
     localparam integer LEFT_SLOT_LAST = CHANNEL_BITS - 1;
     localparam integer SLOT_LAST = (2 * CHANNEL_BITS) - 1;
 
-    reg [15:0] half_period_count = 0;
-    reg [15:0] half_period = BCLK_HALF_FLOOR;
-    reg [15:0] half_period_remainder = 0;
+    reg [31:0] phase_accumulator = 0;
     reg [15:0] slot = 0;
     reg signed [SAMPLE_BITS-1:0] sample_l_hold = 0;
     reg signed [SAMPLE_BITS-1:0] sample_r_hold = 0;
+    wire signed [32:0] phase_step = $signed({1'b0, PHASE_INCREMENT}) + rate_adjust;
+    wire [32:0] phase_sum = {1'b0, phase_accumulator} + phase_step;
 
     always @(posedge clk) begin
         sample_req <= 1'b0;
-        if (half_period_count == half_period - 1'b1) begin
-            half_period_count <= 0;
-            bclk <= ~bclk;
+        phase_accumulator <= phase_sum[31:0];
 
-            if (half_period_remainder + BCLK_HALF_REMAINDER >= BCLK_HALF_DENOMINATOR) begin
-                half_period_remainder <= half_period_remainder + BCLK_HALF_REMAINDER - BCLK_HALF_DENOMINATOR;
-                half_period <= BCLK_HALF_FLOOR + 1'b1;
-            end else begin
-                half_period_remainder <= half_period_remainder + BCLK_HALF_REMAINDER;
-                half_period <= BCLK_HALF_FLOOR;
-            end
+        if (phase_sum[32]) begin
+            bclk <= ~bclk;
 
             // Update SDATA on one BCLK phase and hold it stable on the other.
             if (bclk) begin
@@ -91,8 +83,77 @@ module i2s_tx #(
                     slot <= slot + 1'b1;
                 end
             end
+        end
+    end
+endmodule
+
+module audio_clock_recovery #(
+    parameter integer FIFO_DEPTH = 16,
+    parameter integer FIFO_ADDR_BITS = 4,
+    parameter signed [31:0] RATE_STEP = 32'sd16,
+    parameter signed [31:0] RATE_LIMIT = 32'sd1048576
+)(
+    input  wire clk,
+    input  wire reset,
+    input  wire sample_strobe,
+    input  wire signed [15:0] sample_l_in,
+    input  wire signed [15:0] sample_r_in,
+    input  wire sample_req,
+    output reg  signed [15:0] sample_l_out = 0,
+    output reg  signed [15:0] sample_r_out = 0,
+    output reg  signed [31:0] rate_adjust = 0,
+    output reg  ready = 0,
+    output reg  [FIFO_ADDR_BITS:0] level = 0
+);
+    localparam integer TARGET_LEVEL = FIFO_DEPTH / 2;
+
+    reg [31:0] fifo [0:FIFO_DEPTH-1];
+    reg [FIFO_ADDR_BITS-1:0] write_ptr = 0;
+    reg [FIFO_ADDR_BITS-1:0] read_ptr = 0;
+
+    wire push = sample_strobe && (level < FIFO_DEPTH);
+    wire pop = sample_req && ready && (level != 0);
+
+    always @(posedge clk) begin
+        if (reset) begin
+            write_ptr <= 0;
+            read_ptr <= 0;
+            level <= 0;
+            ready <= 0;
+            rate_adjust <= 0;
+            sample_l_out <= 0;
+            sample_r_out <= 0;
         end else begin
-            half_period_count <= half_period_count + 1'b1;
+            if (push) begin
+                fifo[write_ptr] <= {sample_l_in, sample_r_in};
+                write_ptr <= write_ptr + 1'b1;
+            end
+
+            if (pop) begin
+                sample_l_out <= fifo[read_ptr][31:16];
+                sample_r_out <= fifo[read_ptr][15:0];
+                read_ptr <= read_ptr + 1'b1;
+            end
+
+            case ({push, pop})
+                2'b10: level <= level + 1'b1;
+                2'b01: level <= level - 1'b1;
+                default: level <= level;
+            endcase
+
+            if (!ready) begin
+                rate_adjust <= 0;
+                if (level >= TARGET_LEVEL)
+                    ready <= 1'b1;
+            end else if (level == 0) begin
+                ready <= 1'b0;
+                rate_adjust <= 0;
+            end else if (sample_req) begin
+                if ((level > TARGET_LEVEL) && (rate_adjust < RATE_LIMIT))
+                    rate_adjust <= rate_adjust + RATE_STEP;
+                else if ((level < TARGET_LEVEL) && (rate_adjust > -RATE_LIMIT))
+                    rate_adjust <= rate_adjust - RATE_STEP;
+            end
         end
     end
 endmodule
@@ -278,10 +339,13 @@ module top (
     output wire LRCLK,
     output wire SDATA,
     output wire BLCK,
-    output wire SPDIF_DBG
+    output wire SPDIF_DBG,
+    output wire LEDR_N,
+    output wire LEDG_N
 );
     wire clk_sys;
     wire pll_lock;
+    reg [1:0] pll_lock_sync = 0;
 
     reg [23:0] rx_watchdog = 24'hffffff;
     reg [21:0] dbg_hold = 0;
@@ -291,13 +355,20 @@ module top (
     wire sample_strobe;
     wire spdif_active;
     wire spdif_locked;
-    wire [1:0] force_mode;
 
     reg [9:0] sample_addr = 0;
     reg signed [15:0] sample_fallback = 0;
     wire signed [15:0] rom_sample;
 
     wire sample_req;
+    wire signed [15:0] recovered_sample_l;
+    wire signed [15:0] recovered_sample_r;
+    wire signed [31:0] rate_adjust;
+    wire recovery_ready;
+    wire [4:0] fifo_level;
+    wire receiver_timed_out = rx_watchdog >= 24'd4800000;
+    wire system_ready = pll_lock_sync[1];
+    wire audio_valid = system_ready && spdif_active && !receiver_timed_out && recovery_ready;
 
 
     pll_96m pll (
@@ -305,6 +376,9 @@ module top (
         .clk_96m(clk_sys),
         .pll_lock(pll_lock)
     );
+
+    always @(posedge clk_sys)
+        pll_lock_sync <= {pll_lock_sync[0], pll_lock};
 
     tone_rom #(
         .INIT_FILE("mem_init.txt")
@@ -342,13 +416,28 @@ module top (
         .locked(spdif_locked)
     );
 
-    // The iCEBreaker PLL supplies a 96 MHz DAC master clock.
+    audio_clock_recovery recovery (
+        .clk(clk_sys),
+        .reset(!system_ready || receiver_timed_out),
+        .sample_strobe(sample_strobe),
+        .sample_l_in(sample_l),
+        .sample_r_in(sample_r),
+        .sample_req(sample_req),
+        .sample_l_out(recovered_sample_l),
+        .sample_r_out(recovered_sample_r),
+        .rate_adjust(rate_adjust),
+        .ready(recovery_ready),
+        .level(fifo_level)
+    );
+
+    // PCM5102 derives its internal clock from BCLK; no MCLK is required.
     assign MCLK = 0;
 
     i2s_tx i2s (
         .clk(clk_sys),
-        .sample_l((pll_lock && spdif_active && (rx_watchdog < 24'd4800000)) ? sample_l : sample_fallback),
-        .sample_r((pll_lock && spdif_active && (rx_watchdog < 24'd4800000)) ? sample_r : sample_fallback),
+        .sample_l(audio_valid ? recovered_sample_l : sample_fallback),
+        .sample_r(audio_valid ? recovered_sample_r : sample_fallback),
+        .rate_adjust(rate_adjust),
         .sample_req(sample_req),
         .bclk(BLCK),
         .lrclk(LRCLK),
@@ -356,6 +445,10 @@ module top (
     );
 
     // Debug is meaningful decode status: lock or recent valid frame strobes.
-    assign SPDIF_DBG = spdif_locked | (dbg_hold != 0);
+    assign SPDIF_DBG = 1'b0;
+
+    // Onboard LEDs are active-low: green is valid audio, red is undecoded carrier.
+    assign LEDG_N = 1'b1;
+    assign LEDR_N = ~(spdif_locked | (dbg_hold != 0));
 endmodule
 

@@ -2,12 +2,14 @@
 set_io i_clk 35
 
 # PMOD 1A: I2S output
+# CS4344 legacy wiring
 # Header pins: 1=MCLK, 2=LRCLK, 3=BCLK, 4=SDATA
 #set_io MCLK  4
 #set_io LRCLK 2
 #set_io BLCK   47
 #set_io SDATA  45
 
+# PCM5102 wiring: 1=MCLK (held low), 2=BCLK, 3=SDATA, 4=LRCLK
 set_io MCLK  4
 set_io BLCK   2
 set_io SDATA  47
@@ -21,3 +23,7 @@ set_io LRCLK 45
 # Header pins: 1=RX data, 2=decode status/debug
 set_io SPDIF_IN  43
 set_io SPDIF_DBG 38
+
+# Onboard active-low status LEDs
+set_io LEDR_N 11
+set_io LEDG_N 37

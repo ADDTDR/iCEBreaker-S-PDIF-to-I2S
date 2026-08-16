@@ -3,9 +3,7 @@
 module i2s_tx_tb;
     localparam integer SAMPLE_BITS = 16;
     localparam integer CHANNEL_BITS = 32;
-    localparam integer BCLK_HALF_FLOOR = 2;
-    localparam integer BCLK_HALF_REMAINDER = 0;
-    localparam integer BCLK_HALF_DENOMINATOR = 1;
+    localparam [31:0] PHASE_INCREMENT = 32'h40000000;
     localparam integer FRAME_BITS = 2 * CHANNEL_BITS;
     localparam signed [SAMPLE_BITS-1:0] SAMPLE_L = 16'hA55A;
     localparam signed [SAMPLE_BITS-1:0] SAMPLE_R = 16'h3CC3;
@@ -26,13 +24,12 @@ module i2s_tx_tb;
     i2s_tx #(
         .SAMPLE_BITS(SAMPLE_BITS),
         .CHANNEL_BITS(CHANNEL_BITS),
-        .BCLK_HALF_FLOOR(BCLK_HALF_FLOOR),
-        .BCLK_HALF_REMAINDER(BCLK_HALF_REMAINDER),
-        .BCLK_HALF_DENOMINATOR(BCLK_HALF_DENOMINATOR)
+        .PHASE_INCREMENT(PHASE_INCREMENT)
     ) dut (
         .clk(clk),
         .sample_l(sample_l),
         .sample_r(sample_r),
+        .rate_adjust(32'sd0),
         .sample_req(sample_req),
         .bclk(bclk),
         .lrclk(lrclk),
