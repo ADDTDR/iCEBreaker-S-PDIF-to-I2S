@@ -1,0 +1,23 @@
+# iCEBreaker v1.0e 12 MHz oscillator
+set_io i_clk 35
+
+# PMOD 1A: I2S output
+# Header pins: 1=MCLK, 2=LRCLK, 3=BCLK, 4=SDATA
+#set_io MCLK  4
+#set_io LRCLK 2
+#set_io BLCK   47
+#set_io SDATA  45
+
+set_io MCLK  4
+set_io BLCK   2
+set_io SDATA  47
+set_io LRCLK 45
+
+
+
+
+
+# PMOD 1B: S/PDIF receiver
+# Header pins: 1=RX data, 2=decode status/debug
+set_io SPDIF_IN  43
+set_io SPDIF_DBG 38
