@@ -373,14 +373,14 @@ wire signed [15:0] recovered_sample_l;
 wire signed [15:0] recovered_sample_r;
 wire signed [31:0] rate_adjust;
 wire recovery_ready;
-wire [4:0] fifo_level;
+wire [5:0] fifo_level;
 wire receiver_timed_out = rx_watchdog >= 24'd4800000;
 wire system_ready = pll_lock_sync[1];
 wire audio_valid = system_ready && spdif_active && !receiver_timed_out && recovery_ready;
 
 reg [2:0] hcms_divider = 3'd0;
 reg hcms_clk = 1'b0;
-reg [4:0] fifo_level_meta = 5'd0;
+reg [5:0] fifo_level_meta = 6'd0;
 reg [5:0] fifo_level_display = 6'd0;
 
 pll_96m pll (
@@ -438,7 +438,10 @@ spdif_rx rx (
     .locked(spdif_locked)
 );
 
-audio_clock_recovery recovery (
+audio_clock_recovery #(
+    .FIFO_DEPTH(32),
+    .FIFO_ADDR_BITS(5),
+) recovery (
     .clk(clk_sys),
     .reset(!system_ready || receiver_timed_out),
     .sample_strobe(sample_strobe),
@@ -466,12 +469,12 @@ i2s_tx i2s (
 );
 
 assign SPDIF_DBG = spdif_locked | (dbg_hold != 0);
-assign LEDG_N = ~audio_valid;
+assign LEDG_N = 1'b1;
 assign LEDR_N = ~(spdif_active && !audio_valid);
 
 hcms29xx_integer_display u_display (
     .i_clk(hcms_clk),
-    .i_value({9'd0, fifo_level_display}),
+    .i_value({8'd0, fifo_level_display}),
     .i_pwm(4'b1101),
     .i_current(2'b00),
     .i_sleep(1'b1),
