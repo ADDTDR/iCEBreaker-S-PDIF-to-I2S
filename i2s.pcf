@@ -16,7 +16,13 @@ set_io SDATA  47
 set_io LRCLK 45
 
 
+# Set HCMS-2913 pmod 
 
+set_io HCMS_NCS_O 27
+set_io HCMS_DATA_O 25
+set_io HCMS_REGSEL_O 21
+set_io HCMS_CLOCK_O 19
+set_io HCMS_RESET_O 26
 
 
 # PMOD 1B: S/PDIF receiver
