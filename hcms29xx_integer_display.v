@@ -1,5 +1,5 @@
 module hcms29xx_integer_display #(
-    parameter integer CLOCK_DIVIDER = 10,
+    parameter integer CLOCK_DIVIDER = 2,
     parameter integer RESET_TICKS = 100
 ) (
     input wire i_clk,
