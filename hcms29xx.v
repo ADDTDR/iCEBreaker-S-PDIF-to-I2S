@@ -2,7 +2,7 @@
 // DATA is stable while CLOCK is low and sampled on CLOCK rising edges.
 module hcms29xx #(
     parameter integer CLOCK_DIVIDER = 12,
-    parameter integer RESET_TICKS = 8
+    parameter integer RESET_TICKS = 36
 ) (
     input wire i_clk,
     input wire [159:0] i_frame,
@@ -41,8 +41,8 @@ module hcms29xx #(
     reg [4:0] frame_index = 0;
 
 
-    reg [7:0] w_control_word_0 = {CFG_WORD_0_SEL, i_sleep, i_current, i_pwm};
-    reg [7:0] w_control_word_1 = {CFG_WORD_1_SEL, 5'b00000, 1'b0, 1'b1};
+    wire [7:0] w_control_word_0 = {CFG_WORD_0_SEL, i_sleep, i_current, i_pwm};
+    wire [7:0] w_control_word_1 = {CFG_WORD_1_SEL, 5'b00000, 1'b0, 1'b1};
 
     function [7:0] frame_byte;
         input [159:0] frame;
