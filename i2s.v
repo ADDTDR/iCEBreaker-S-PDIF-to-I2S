@@ -223,7 +223,9 @@ module pll_96m (
  endmodule
 
 
-module top (
+module top #(
+    parameter integer AMP_LEVEL = 4
+)(
     input wire i_clk,
     output wire HCMS_DATA_O,
     output wire HCMS_CLOCK_O,
@@ -257,11 +259,17 @@ wire audio_valid = system_ready && mic_active;
 
 reg signed [15:0] mic_left_buffer = 16'sd0;
 reg signed [15:0] mic_right_buffer = 16'sd0;
-wire signed [18:0] mic_left_x8 = $signed({{3{sample_l[15]}}, sample_l}) <<< 3;
+localparam integer AMP_SHIFT =
+    (AMP_LEVEL == 1) ? 0 :
+    (AMP_LEVEL == 2) ? 1 :
+    (AMP_LEVEL == 4) ? 2 :
+    (AMP_LEVEL == 8) ? 3 : 0;
+wire signed [18:0] mic_scaled =
+    $signed({{3{sample_l[15]}}, sample_l}) <<< AMP_SHIFT;
 wire signed [15:0] mic_mono_gain =
-    (mic_left_x8 > 19'sd32767) ? 16'sh7fff :
-    (mic_left_x8 < -19'sd32768) ? 16'sh8000 :
-    mic_left_x8[15:0];
+    (mic_scaled > 19'sd32767) ? 16'sh7fff :
+    (mic_scaled < -19'sd32768) ? 16'sh8000 :
+    mic_scaled[15:0];
 
 reg [23:0] window_counter = 24'd0;
 reg [13:0] frame_counter = 14'd0;
