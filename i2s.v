@@ -383,12 +383,12 @@ reg hcms_clk = 1'b0;
 reg [5:0] fifo_level_meta = 6'd0;
 reg [5:0] fifo_level_display = 6'd0;
 
-wire [20:0] fft_bars_l;
-wire [20:0] fft_bars_r;
-reg [20:0] fft_bars_l_meta = 21'd0;
-reg [20:0] fft_bars_l_display = 21'd0;
-reg [20:0] fft_bars_r_meta = 21'd0;
-reg [20:0] fft_bars_r_display = 21'd0;
+wire [29:0] fft_bars_l;
+wire [29:0] fft_bars_r;
+reg [29:0] fft_bars_l_meta = 30'd0;
+reg [29:0] fft_bars_l_display = 30'd0;
+reg [29:0] fft_bars_r_meta = 30'd0;
+reg [29:0] fft_bars_r_display = 30'd0;
 
 pll_96m pll (
     .clk_12m(i_clk),
@@ -434,14 +434,14 @@ end
 audio_spectrum_bands spectrum_l (
     .i_clk(clk_sys),
     .i_strobe(sample_strobe),
-    .i_sample(sample_l),
+    .i_sample(recovered_sample_l),
     .o_bars(fft_bars_l)
 );
 
 audio_spectrum_bands spectrum_r (
     .i_clk(clk_sys),
     .i_strobe(sample_strobe),
-    .i_sample(sample_r),
+    .i_sample(recovered_sample_r),
     .o_bars(fft_bars_r)
 );
 

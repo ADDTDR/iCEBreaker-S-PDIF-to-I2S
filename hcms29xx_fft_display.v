@@ -5,9 +5,9 @@ module audio_spectrum_bands (
     input wire i_clk,
     input wire i_strobe,
     input wire signed [15:0] i_sample,
-    output wire [20:0] o_bars
+    output wire [29:0] o_bars
 );
-    localparam integer BANDS = 7;
+    localparam integer BANDS = 10;
 
     reg [BANDS*24-1:0] lp_flat = 0;
     reg [BANDS*16-1:0] env_flat = 0;
@@ -54,15 +54,15 @@ module audio_spectrum_bands (
     endfunction
 endmodule
 
-// 14 bar spectrum display: 7 bars for the left channel on the first two
-// characters and 7 bars for the right channel on the last two.
+// 20 bar spectrum display: 10 bars for the left channel on the first two
+// characters and 10 bars for the right channel on the last two.
 module hcms29xx_fft_display #(
     parameter integer CLOCK_DIVIDER = 10,
     parameter integer RESET_TICKS = 100
 ) (
     input wire i_clk,
-    input wire [20:0] i_bars_l,
-    input wire [20:0] i_bars_r,
+    input wire [29:0] i_bars_l,
+    input wire [29:0] i_bars_r,
     input wire [3:0] i_pwm,
     input wire [1:0] i_current,
     input wire i_sleep,
@@ -80,19 +80,20 @@ module hcms29xx_fft_display #(
         bar_col(i_bars_l[14:12]),
         bar_col(i_bars_l[17:15]),
         bar_col(i_bars_l[20:18]),
-        8'h00,
-        8'h00,
-        8'h00,
-        8'h00,
-        8'h00,
-        8'h00,
+        bar_col(i_bars_l[23:21]),
+        bar_col(i_bars_l[26:24]),
+        bar_col(i_bars_l[29:27]),
+        
         bar_col(i_bars_r[2:0]),
         bar_col(i_bars_r[5:3]),
         bar_col(i_bars_r[8:6]),
         bar_col(i_bars_r[11:9]),
         bar_col(i_bars_r[14:12]),
         bar_col(i_bars_r[17:15]),
-        bar_col(i_bars_r[20:18])
+        bar_col(i_bars_r[20:18]),
+        bar_col(i_bars_r[23:21]),
+        bar_col(i_bars_r[26:24]),
+        bar_col(i_bars_r[29:27])
     };
 
     hcms29xx #(
