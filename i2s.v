@@ -383,6 +383,13 @@ reg hcms_clk = 1'b0;
 reg [5:0] fifo_level_meta = 6'd0;
 reg [5:0] fifo_level_display = 6'd0;
 
+wire [20:0] fft_bars_l;
+wire [20:0] fft_bars_r;
+reg [20:0] fft_bars_l_meta = 21'd0;
+reg [20:0] fft_bars_l_display = 21'd0;
+reg [20:0] fft_bars_r_meta = 21'd0;
+reg [20:0] fft_bars_r_display = 21'd0;
+
 pll_96m pll (
     .clk_12m(i_clk),
     .clk_96m(clk_sys),
@@ -418,7 +425,25 @@ end
 always @(posedge hcms_clk) begin
     fifo_level_meta <= fifo_level;
     fifo_level_display <= fifo_level_meta;
+    fft_bars_l_meta <= fft_bars_l;
+    fft_bars_l_display <= fft_bars_l_meta;
+    fft_bars_r_meta <= fft_bars_r;
+    fft_bars_r_display <= fft_bars_r_meta;
 end
+
+audio_spectrum_bands spectrum_l (
+    .i_clk(clk_sys),
+    .i_strobe(sample_strobe),
+    .i_sample(sample_l),
+    .o_bars(fft_bars_l)
+);
+
+audio_spectrum_bands spectrum_r (
+    .i_clk(clk_sys),
+    .i_strobe(sample_strobe),
+    .i_sample(sample_r),
+    .o_bars(fft_bars_r)
+);
 
 tone_rom #(
     .INIT_FILE("mem_init.txt")
@@ -472,9 +497,23 @@ assign SPDIF_DBG = spdif_locked | (dbg_hold != 0);
 assign LEDG_N = 1'b1;
 assign LEDR_N = ~(spdif_active && !audio_valid);
 
-hcms29xx_integer_display u_display (
+// hcms29xx_integer_display u_display (
+//     .i_clk(hcms_clk),
+//     .i_value({8'd0, fifo_level_display}),
+//     .i_pwm(4'b1101),
+//     .i_current(2'b00),
+//     .i_sleep(1'b1),
+//     .o_hcms_data(HCMS_DATA_O),
+//     .o_hcms_clock(HCMS_CLOCK_O),
+//     .o_hcms_regsel(HCMS_REGSEL_O),
+//     .o_hcms_ncs(HCMS_NCS_O),
+//     .o_hcms_reset(HCMS_RESET_O)
+// );
+
+hcms29xx_fft_display u_display (
     .i_clk(hcms_clk),
-    .i_value({8'd0, fifo_level_display}),
+    .i_bars_l(fft_bars_l_display),
+    .i_bars_r(fft_bars_r_display),
     .i_pwm(4'b1101),
     .i_current(2'b00),
     .i_sleep(1'b1),
