@@ -433,15 +433,15 @@ end
 
 audio_spectrum_bands spectrum_l (
     .i_clk(clk_sys),
-    .i_strobe(sample_strobe),
-    .i_sample(recovered_sample_l),
+    .i_strobe(sample_req),
+    .i_sample(raw_audio_l),
     .o_bars(fft_bars_l)
 );
 
 audio_spectrum_bands spectrum_r (
     .i_clk(clk_sys),
-    .i_strobe(sample_strobe),
-    .i_sample(recovered_sample_r),
+    .i_strobe(sample_req),
+    .i_sample(raw_audio_r),
     .o_bars(fft_bars_r)
 );
 
@@ -482,10 +482,14 @@ audio_clock_recovery #(
 
 assign MCLK = 1'b0;
 
+wire signed [15:0] raw_audio_l = audio_valid ? recovered_sample_l : sample_fallback;
+wire signed [15:0] raw_audio_r = audio_valid ? recovered_sample_r : sample_fallback;
+
+
 i2s_tx i2s (
     .clk(clk_sys),
-    .sample_l(audio_valid ? recovered_sample_l : sample_fallback),
-    .sample_r(audio_valid ? recovered_sample_r : sample_fallback),
+    .sample_l(raw_audio_l),
+    .sample_r(raw_audio_r),
     .rate_adjust(rate_adjust),
     .sample_req(sample_req),
     .bclk(BLCK),
