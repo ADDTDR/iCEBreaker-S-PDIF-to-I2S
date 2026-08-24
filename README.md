@@ -31,6 +31,33 @@ intended to correct oscillator tolerance and long-term drift from the working
 Apple TV source, not convert between unrelated sample rates. BCLK still has
 the one-system-clock quantization jitter inherent in an FPGA NCO.
 
+## Spectrum Display
+
+An HCMS-29xx four-character dot-matrix display shows a 20-bar stereo spectrum:
+10 bars for the left channel in the first two characters and 10 bars for the
+right channel in the last two. Each bar is seven dots high and grows upward
+from the bottom row.
+
+This is not a literal FFT. It
+uses a compact, FPGA-friendly filter bank implemented by `audio_spectrum_bands`:
+
+- Each channel feeds ten cascaded 24-bit one-pole low-pass stages at the I2S
+	sample request rate.
+- The difference between adjacent low-pass stages forms a progressively lower
+	frequency band; the final stage supplies the lowest-frequency band.
+- The absolute value of each band drives a 16-bit envelope. It rises
+	immediately with signal level and decays gradually between peaks.
+- A logarithmic-style threshold map converts each envelope to one of eight
+	levels (zero through seven), which becomes the visible bar height.
+
+The display analyzes the samples currently presented to the I2S transmitter.
+It therefore follows recovered S/PDIF audio when locked and shows the fallback
+ROM tone when no valid input is available. The bar values cross from the 96 MHz
+audio clock into a divided HCMS display clock through two register stages.
+
+The bands are useful as a low-cost visual spectrum indicator, not as
+calibrated FFT bins or a precision audio analyzer.
+
 ## Connections
 
 ### PMOD 1A - PCM5102
@@ -52,6 +79,16 @@ the one-system-clock quantization jitter inherent in an FPGA NCO.
 | 2 | 38 | Decode status/debug output |
 | 5 | - | Ground |
 | 6 | - | 3.3 V |
+
+### HCMS-29xx Display
+
+| FPGA pin | Signal | HCMS-29xx |
+| ---: | --- | --- |
+| 27 | HCMS_NCS_O | /CE or /CS |
+| 25 | HCMS_DATA_O | Data in |
+| 21 | HCMS_REGSEL_O | Register select |
+| 19 | HCMS_CLOCK_O | Clock |
+| 26 | HCMS_RESET_O | Reset |
 
 Do not connect raw coaxial or optical S/PDIF directly to the FPGA pin. Use a
 receiver module that outputs a 3.3 V-compatible logic signal.
@@ -78,13 +115,3 @@ apio test
 apio build
 apio upload
 ```
-
-The generated bitstream is `_build/default/hardware.bin`.
-
-## Current Limitations
-
-- Receiver thresholds and clock recovery are tuned around 96 kHz S/PDIF input.
-- Recovery tracks small source/local oscillator differences; it is not an
-	asynchronous sample-rate converter for 44.1 or 48 kHz input.
-- The 16-frame FIFO adds about 83 microseconds of startup buffering at 96 kHz.
-- Loss of valid decoded frames selects the ROM fallback tone.
