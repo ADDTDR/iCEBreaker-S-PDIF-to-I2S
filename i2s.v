@@ -349,7 +349,7 @@ module top (
     output wire BLCK,
     output wire SPDIF_DBG,
     output wire LEDR_N,
-    output wire LEDG_N,
+    output wire LEDG_N
 );
 
 wire clk_sys;
@@ -385,6 +385,8 @@ reg [5:0] fifo_level_display = 6'd0;
 
 wire [29:0] fft_bars_l;
 wire [29:0] fft_bars_r;
+wire signed [15:0] raw_audio_l;
+wire signed [15:0] raw_audio_r;
 reg [29:0] fft_bars_l_meta = 30'd0;
 reg [29:0] fft_bars_l_display = 30'd0;
 reg [29:0] fft_bars_r_meta = 30'd0;
@@ -465,7 +467,7 @@ spdif_rx rx (
 
 audio_clock_recovery #(
     .FIFO_DEPTH(32),
-    .FIFO_ADDR_BITS(5),
+    .FIFO_ADDR_BITS(5)
 ) recovery (
     .clk(clk_sys),
     .reset(!system_ready || receiver_timed_out),
@@ -482,8 +484,8 @@ audio_clock_recovery #(
 
 assign MCLK = 1'b0;
 
-wire signed [15:0] raw_audio_l = audio_valid ? recovered_sample_l : sample_fallback;
-wire signed [15:0] raw_audio_r = audio_valid ? recovered_sample_r : sample_fallback;
+assign raw_audio_l = audio_valid ? recovered_sample_l : sample_fallback;
+assign raw_audio_r = audio_valid ? recovered_sample_r : sample_fallback;
 
 
 i2s_tx i2s (

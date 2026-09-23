@@ -5,38 +5,89 @@ module audio_spectrum_bands (
     input wire i_clk,
     input wire i_strobe,
     input wire signed [15:0] i_sample,
-    output wire [29:0] o_bars
+    output reg [29:0] o_bars = 0
 );
     localparam integer BANDS = 10;
 
     reg [BANDS*24-1:0] lp_flat = 0;
     reg [BANDS*16-1:0] env_flat = 0;
+    reg [BANDS*3-1:0] bars_work = 0;
+    reg signed [23:0] lp_previous = 0;
+    reg signed [23:0] lp_current_reg = 0;
+    reg signed [23:0] difference_reg = 0;
+    reg signed [23:0] lp_next_reg = 0;
+    reg [15:0] magnitude_reg = 0;
+    reg [15:0] envelope_current_reg = 0;
+    reg [3:0] band_index = 0;
+    reg [1:0] phase = 0;
+    reg busy = 0;
 
     wire signed [23:0] x_ext = {i_sample, 8'd0};
+    wire signed [23:0] lp_current = $signed(lp_flat[23:0]);
+    wire signed [23:0] band_value = (band_index == BANDS - 1) ? lp_current_reg
+                                                                       : difference_reg;
+    wire [23:0] band_abs = band_value[23] ? (~band_value + 1'b1) : band_value;
+    wire [15:0] envelope_next = (magnitude_reg > envelope_current_reg) ? magnitude_reg
+                              : (envelope_current_reg - (envelope_current_reg >> 6));
 
-    genvar k;
-    generate
-        for (k = 0; k < BANDS; k = k + 1) begin : band
-            wire signed [23:0] lp_cur = $signed(lp_flat[k*24 +: 24]);
-            wire signed [23:0] lp_prev = (k == 0) ? x_ext
-                                                  : $signed(lp_flat[((k == 0) ? 0 : k - 1)*24 +: 24]);
-            wire signed [23:0] diff = lp_prev - lp_cur;
-            wire signed [23:0] band_val = (k == BANDS - 1) ? lp_cur : diff;
-            wire [23:0] band_abs = band_val[23] ? (~band_val + 1'b1) : band_val;
-            wire [15:0] mag = band_abs[23:8];
-            wire [15:0] env_cur = env_flat[k*16 +: 16];
-
-            always @(posedge i_clk) begin
-                if (i_strobe) begin
-                    lp_flat[k*24 +: 24] <= lp_cur + (diff >>> (k + 1));
-                    env_flat[k*16 +: 16] <= (mag > env_cur) ? mag
-                                                            : (env_cur - (env_cur >> 6));
+    always @(posedge i_clk) begin
+        if (i_strobe && !busy) begin
+            lp_previous <= x_ext;
+            band_index <= 0;
+            phase <= 0;
+            busy <= 1'b1;
+        end else if (busy) begin
+            case (phase)
+                2'd0: begin
+                    lp_current_reg <= lp_current;
+                    envelope_current_reg <= env_flat[15:0];
+                    phase <= 2'd1;
                 end
-            end
+                2'd1: begin
+                    difference_reg <= lp_previous - lp_current_reg;
+                    phase <= 2'd2;
+                end
+                2'd2: begin
+                    lp_next_reg <= lp_current_reg + filter_step(difference_reg, band_index);
+                    magnitude_reg <= band_abs[23:8];
+                    phase <= 2'd3;
+                end
+                default: begin
+                    lp_flat <= {lp_next_reg, lp_flat[BANDS*24-1:24]};
+                    env_flat <= {envelope_next, env_flat[BANDS*16-1:16]};
+                    bars_work <= {level_of(envelope_next), bars_work[BANDS*3-1:3]};
+                    lp_previous <= lp_current_reg;
+                    phase <= 0;
 
-            assign o_bars[k*3 +: 3] = level_of(env_cur);
+                    if (band_index == BANDS - 1) begin
+                        o_bars <= {level_of(envelope_next), bars_work[BANDS*3-1:3]};
+                        busy <= 1'b0;
+                    end else begin
+                        band_index <= band_index + 1'b1;
+                    end
+                end
+            endcase
         end
-    endgenerate
+    end
+
+    function signed [23:0] filter_step;
+        input signed [23:0] value;
+        input [3:0] index;
+        begin
+            case (index)
+                4'd0: filter_step = value >>> 1;
+                4'd1: filter_step = value >>> 2;
+                4'd2: filter_step = value >>> 3;
+                4'd3: filter_step = value >>> 4;
+                4'd4: filter_step = value >>> 5;
+                4'd5: filter_step = value >>> 6;
+                4'd6: filter_step = value >>> 7;
+                4'd7: filter_step = value >>> 8;
+                4'd8: filter_step = value >>> 9;
+                default: filter_step = value >>> 10;
+            endcase
+        end
+    endfunction
 
     // Log-ish mapping of envelope magnitude onto the 7 visible dot rows.
     function [2:0] level_of;
