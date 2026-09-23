@@ -6,8 +6,8 @@ module audio_spectrum_bands_tb;
     reg signed [15:0] sample = 0;
     wire [29:0] bars;
 
-    reg signed [23:0] lp_model [0:9];
-    reg [15:0] env_model [0:9];
+    reg signed [23:0] lp_model [0:4];
+    reg [15:0] env_model [0:4];
     reg [29:0] expected_bars = 0;
     integer index;
 
@@ -46,17 +46,18 @@ module audio_spectrum_bands_tb;
         integer band;
         begin
             previous = {next_sample, 8'd0};
-            for (band = 0; band < 10; band = band + 1) begin
+            for (band = 0; band < 5; band = band + 1) begin
                 current = lp_model[band];
                 difference = previous - current;
-                band_value = (band == 9) ? current : difference;
+                band_value = (band == 4) ? current : difference;
                 band_abs = band_value[23] ? (~band_value + 1'b1) : band_value;
                 magnitude = band_abs[23:8];
                 envelope_next = (magnitude > env_model[band]) ? magnitude
                               : (env_model[band] - (env_model[band] >> 6));
-                lp_model[band] = current + (difference >>> (band + 1));
+                lp_model[band] = current + (difference >>> (2 * band + 1));
                 env_model[band] = envelope_next;
-                expected_bars[band*3 +: 3] = level_of(envelope_next);
+                expected_bars[band*6 +: 3] = level_of(envelope_next);
+                expected_bars[band*6+3 +: 3] = level_of(envelope_next);
                 previous = current;
             end
 
@@ -65,7 +66,7 @@ module audio_spectrum_bands_tb;
             strobe = 1'b1;
             @(negedge clk);
             strobe = 1'b0;
-            repeat (41) @(posedge clk);
+            repeat (21) @(posedge clk);
             #1;
 
             if (bars !== expected_bars) begin
@@ -76,7 +77,7 @@ module audio_spectrum_bands_tb;
     endtask
 
     initial begin
-        for (index = 0; index < 10; index = index + 1) begin
+        for (index = 0; index < 5; index = index + 1) begin
             lp_model[index] = 0;
             env_model[index] = 0;
         end

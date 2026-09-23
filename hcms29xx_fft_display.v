@@ -5,13 +5,14 @@ module audio_spectrum_bands (
     input wire i_clk,
     input wire i_strobe,
     input wire signed [15:0] i_sample,
-    output reg [29:0] o_bars = 0
+    output wire [29:0] o_bars
 );
-    localparam integer BANDS = 10;
+    localparam integer BANDS = 5;
 
     reg [BANDS*24-1:0] lp_flat = 0;
     reg [BANDS*16-1:0] env_flat = 0;
     reg [BANDS*3-1:0] bars_work = 0;
+    reg [BANDS*3-1:0] bars_output = 0;
     reg signed [23:0] lp_previous = 0;
     reg signed [23:0] lp_current_reg = 0;
     reg signed [23:0] difference_reg = 0;
@@ -29,6 +30,14 @@ module audio_spectrum_bands (
     wire [23:0] band_abs = band_value[23] ? (~band_value + 1'b1) : band_value;
     wire [15:0] envelope_next = (magnitude_reg > envelope_current_reg) ? magnitude_reg
                               : (envelope_current_reg - (envelope_current_reg >> 6));
+
+    assign o_bars = {
+        bars_output[14:12], bars_output[14:12],
+        bars_output[11:9], bars_output[11:9],
+        bars_output[8:6], bars_output[8:6],
+        bars_output[5:3], bars_output[5:3],
+        bars_output[2:0], bars_output[2:0]
+    };
 
     always @(posedge i_clk) begin
         if (i_strobe && !busy) begin
@@ -60,7 +69,7 @@ module audio_spectrum_bands (
                     phase <= 0;
 
                     if (band_index == BANDS - 1) begin
-                        o_bars <= {level_of(envelope_next), bars_work[BANDS*3-1:3]};
+                        bars_output <= {level_of(envelope_next), bars_work[BANDS*3-1:3]};
                         busy <= 1'b0;
                     end else begin
                         band_index <= band_index + 1'b1;
@@ -76,15 +85,10 @@ module audio_spectrum_bands (
         begin
             case (index)
                 4'd0: filter_step = value >>> 1;
-                4'd1: filter_step = value >>> 2;
-                4'd2: filter_step = value >>> 3;
-                4'd3: filter_step = value >>> 4;
-                4'd4: filter_step = value >>> 5;
-                4'd5: filter_step = value >>> 6;
-                4'd6: filter_step = value >>> 7;
-                4'd7: filter_step = value >>> 8;
-                4'd8: filter_step = value >>> 9;
-                default: filter_step = value >>> 10;
+                4'd1: filter_step = value >>> 3;
+                4'd2: filter_step = value >>> 5;
+                4'd3: filter_step = value >>> 7;
+                default: filter_step = value >>> 9;
             endcase
         end
     endfunction

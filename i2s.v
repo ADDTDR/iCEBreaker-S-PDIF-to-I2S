@@ -354,6 +354,8 @@ module top (
 
 wire clk_sys;
 wire pll_lock;
+wire cpu_booted;
+wire cpu_trap;
 reg [1:0] pll_lock_sync = 2'b00;
 reg [23:0] rx_watchdog = 24'hffffff;
 reg [21:0] dbg_hold = 22'd0;
@@ -378,8 +380,8 @@ wire receiver_timed_out = rx_watchdog >= 24'd4800000;
 wire system_ready = pll_lock_sync[1];
 wire audio_valid = system_ready && spdif_active && !receiver_timed_out && recovery_ready;
 
-reg [2:0] hcms_divider = 3'd0;
-reg hcms_clk = 1'b0;
+reg [1:0] cpu_clock_divider = 2'd0;
+reg cpu_clk = 1'b0;
 reg [5:0] fifo_level_meta = 6'd0;
 reg [5:0] fifo_level_display = 6'd0;
 
@@ -398,14 +400,21 @@ pll_96m pll (
     .pll_lock(pll_lock)
 );
 
+cpu_subsystem cpu_system (
+    .i_clk(cpu_clk),
+    .i_reset(!pll_lock),
+    .o_booted(cpu_booted),
+    .o_trap(cpu_trap)
+);
+
 always @(posedge clk_sys) begin
     pll_lock_sync <= {pll_lock_sync[0], pll_lock};
 
-    if (hcms_divider == 3'd3) begin
-        hcms_divider <= 3'd0;
-        hcms_clk <= ~hcms_clk;
+    if (cpu_clock_divider == 2'd3) begin
+        cpu_clock_divider <= 2'd0;
+        cpu_clk <= ~cpu_clk;
     end else begin
-        hcms_divider <= hcms_divider + 1'b1;
+        cpu_clock_divider <= cpu_clock_divider + 1'b1;
     end
 
     if (sample_strobe)
@@ -424,7 +433,7 @@ always @(posedge clk_sys) begin
     end
 end
 
-always @(posedge hcms_clk) begin
+always @(posedge clk_sys) begin
     fifo_level_meta <= fifo_level;
     fifo_level_display <= fifo_level_meta;
     fft_bars_l_meta <= fft_bars_l;
@@ -500,11 +509,11 @@ i2s_tx i2s (
 );
 
 assign SPDIF_DBG = spdif_locked | (dbg_hold != 0);
-assign LEDG_N = 1'b1;
-assign LEDR_N = ~(spdif_active && !audio_valid);
+assign LEDG_N = ~cpu_booted;
+assign LEDR_N = ~(cpu_trap || (spdif_active && !audio_valid));
 
 // hcms29xx_integer_display u_display (
-//     .i_clk(hcms_clk),
+//     .i_clk(clk_sys),
 //     .i_value({8'd0, fifo_level_display}),
 //     .i_pwm(4'b1101),
 //     .i_current(2'b00),
@@ -516,8 +525,10 @@ assign LEDR_N = ~(spdif_active && !audio_valid);
 //     .o_hcms_reset(HCMS_RESET_O)
 // );
 
-hcms29xx_fft_display u_display (
-    .i_clk(hcms_clk),
+hcms29xx_fft_display #(
+    .CLOCK_DIVIDER(80)
+) u_display (
+    .i_clk(clk_sys),
     .i_bars_l(fft_bars_l_display),
     .i_bars_r(fft_bars_r_display),
     .i_pwm(4'b1101),

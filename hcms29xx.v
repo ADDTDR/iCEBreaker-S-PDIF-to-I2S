@@ -30,12 +30,15 @@ module hcms29xx #(
 
     localparam CFG_WORD_0_SEL = 1'b0;
     localparam CFG_WORD_1_SEL = 1'b1;
+    localparam integer DIVIDER_WIDTH = (CLOCK_DIVIDER <= 1) ? 1 : $clog2(CLOCK_DIVIDER);
+    localparam integer RESET_COUNT_WIDTH = (RESET_TICKS <= 1) ? 1 : $clog2(RESET_TICKS);
 
 
     reg [3:0] state = ST_RESET;
-    reg [31:0] divider = 0;
-    reg [31:0] reset_count = 0;
+    reg [DIVIDER_WIDTH-1:0] divider = 0;
+    reg [RESET_COUNT_WIDTH-1:0] reset_count = 0;
     reg [7:0] shift_register = 0;
+    reg [159:0] frame_shift = 0;
     reg [2:0] bit_index = 0;
     reg [1:0] phase = 0;
     reg [4:0] frame_index = 0;
@@ -43,14 +46,6 @@ module hcms29xx #(
 
     wire [7:0] w_control_word_0 = {CFG_WORD_0_SEL, i_sleep, i_current, i_pwm};
     wire [7:0] w_control_word_1 = {CFG_WORD_1_SEL, 5'b00000, 1'b0, 1'b1};
-
-    function [7:0] frame_byte;
-        input [159:0] frame;
-        input [4:0] index;
-        begin
-            frame_byte = frame >> ((19 - index) * 8);
-        end
-    endfunction
 
     always @(posedge i_clk) begin
         if (divider == CLOCK_DIVIDER - 1) begin
@@ -140,7 +135,8 @@ module hcms29xx #(
                     o_regsel <= 1'b0;
                     o_ncs <= 1'b1;
                     o_clock <= 1'b1;
-                    shift_register <= frame_byte(i_frame, frame_index);
+                    frame_shift <= i_frame;
+                    shift_register <= i_frame[159:152];
                     bit_index <= 0;
                     phase <= 0;
                     state <= ST_DATA_SEND;
@@ -159,7 +155,8 @@ module hcms29xx #(
                                 end
                                 else begin
                                     frame_index <= frame_index + 1'b1;
-                                    shift_register <= frame_byte(i_frame, frame_index + 1'b1);
+                                    frame_shift <= {frame_shift[151:0], 8'd0};
+                                    shift_register <= frame_shift[151:144];
                                     bit_index <= 0;
                                     phase <= 1;
                                 end
