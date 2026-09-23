@@ -51,10 +51,10 @@ uses a compact, FPGA-friendly filter bank implemented by `audio_spectrum_bands`:
 - A logarithmic-style threshold map converts each envelope to one of eight
 	levels (zero through seven), which becomes the visible bar height.
 
-The display analyzes the samples currently presented to the I2S transmitter.
-It therefore follows recovered S/PDIF audio when locked and shows silence when
-no valid input is available. The bar values cross from the 96 MHz analyzer into
-the HCMS frame registers in the same clock domain.
+The display analyzer receives samples through the RISC-V firmware path. The CPU
+polls the S/PDIF receive FIFO, reads each packed stereo frame, and writes it to
+the spectrum mailbox. A synchronized update toggle transfers that sample back
+to the 96 MHz analyzer domain. I2S playback remains on its direct hardware path.
 
 The bands are useful as a low-cost visual spectrum indicator, not as
 calibrated FFT bins or a precision audio analyzer.
@@ -65,19 +65,28 @@ audio sample.
 
 ## Wishbone Peripheral Bus
 
-The first CPU integration stage provides a 32-bit, single-master Wishbone
-Classic peripheral bus. Four 4 KB slots are reserved:
+The CPU integration provides a 32-bit, single-master Wishbone Classic
+peripheral bus. Four 4 KB slots are reserved:
 
 | Address range | Planned peripheral |
 | --- | --- |
 | `0x10000000` - `0x10000fff` | S/PDIF receive FIFO |
 | `0x10001000` - `0x10001fff` | I2S transmit FIFO |
-| `0x10002000` - `0x10002fff` | Spectrum analyzer |
+| `0x10002000` - `0x10002fff` | Reserved |
 | `0x10003000` - `0x10003fff` | HCMS display |
 
-During bus bring-up, slot zero contains an ID register at offset `0x00` and a
-byte-writable scratch register at offset `0x04`. Disabled or out-of-range
-accesses complete with both `ACK` and `ERR`, preventing a software bus hang.
+The implemented receive peripheral registers are:
+
+| Address | Access | Function |
+| --- | --- | --- |
+| `0x10000000` | Read | Device ID, `0x49434542` (`ICEB`) |
+| `0x10000004` | Read | Bit 0: RX not empty; bit 1: RX overflow |
+| `0x10000008` | Read | Pop packed `{left[15:0], right[15:0]}` sample |
+| `0x1000000c` | Read/write | Boot-test scratch register |
+| `0x10000010` | Read/write | Spectrum sample mailbox |
+
+Disabled or out-of-range Wishbone slots complete with both `ACK` and `ERR`,
+preventing a software bus hang.
 
 ## RISC-V CPU
 
@@ -87,9 +96,20 @@ division, compressed instructions, and the upper 16 registers are disabled.
 The vendored `picorv32.v` is the source distributed with the APIO OSS CAD
 Suite.
 
-The initial freestanding C firmware reads the Wishbone device ID, writes and
-reads back the scratch register, then writes `0xb007c0de` as its boot-success
-signature. Rebuild the checked-in BRAM image with:
+The freestanding C firmware first checks that the Wishbone device ID is
+`0x49434542` and verifies scratch-register read/write operation with the pattern
+`0x12345678`. It writes `0xbad00001` on an ID failure or `0xbad00002` on a
+scratch failure, then stops. On success it clears the scratch register, so the
+firmware briefly writes the `0xb007c0de` boot signature and then clears it, so
+the green boot indicator remains off during normal operation.
+
+The main polling loop tests bit 0 of `RX_STATUS` (`RX_NOT_EMPTY`). When a stereo
+frame is available, reading `RX_DATA` removes it from the receive FIFO and the
+firmware writes that packed frame to `SPECTRUM_DATA`. This makes the spectrum
+analyzer and display depend on the CPU transport path, while I2S playback stays
+in hardware.
+
+Rebuild the checked-in BRAM image with:
 
 ```sh
 make -C firmware
@@ -97,6 +117,10 @@ make -C firmware
 
 This requires `riscv64-elf-gcc` and `riscv64-elf-objcopy`; on macOS they are
 provided by the Homebrew `riscv64-elf-gcc` formula.
+
+Generating `firmware.hex` removes cached APIO synthesis outputs so the next
+`apio build` always embeds the updated firmware instead of reusing an older
+bitstream.
 
 ## Connections
 

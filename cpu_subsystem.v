@@ -42,7 +42,10 @@ module cpu_subsystem (
     input wire signed [15:0] i_sample_l,
     input wire signed [15:0] i_sample_r,
     output wire o_booted,
-    output wire o_trap
+    output wire o_trap,
+    output wire signed [15:0] o_spectrum_sample_l,
+    output wire signed [15:0] o_spectrum_sample_r,
+    output wire o_spectrum_sample_strobe
 );
     wire [31:0] master_address;
     wire [31:0] master_write_data;
@@ -166,6 +169,9 @@ module cpu_subsystem (
         .o_wb_dat(scratch_read_data),
         .o_wb_ack(scratch_ack),
         .o_wb_err(scratch_error),
-        .o_scratch(scratch_value)
+        .o_scratch(scratch_value),
+        .o_spectrum_sample_l(o_spectrum_sample_l),
+        .o_spectrum_sample_r(o_spectrum_sample_r),
+        .o_spectrum_sample_strobe(o_spectrum_sample_strobe)
     );
 endmodule

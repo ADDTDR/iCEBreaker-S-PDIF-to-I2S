@@ -358,17 +358,14 @@ wire audio_valid = system_ready && spdif_active && !receiver_timed_out && recove
 
 reg [1:0] cpu_clock_divider = 2'd0;
 reg cpu_clk = 1'b0;
-reg [5:0] fifo_level_meta = 6'd0;
-reg [5:0] fifo_level_display = 6'd0;
 
 wire [29:0] fft_bars_l;
 wire [29:0] fft_bars_r;
 wire signed [15:0] raw_audio_l;
 wire signed [15:0] raw_audio_r;
-reg [29:0] fft_bars_l_meta = 30'd0;
-reg [29:0] fft_bars_l_display = 30'd0;
-reg [29:0] fft_bars_r_meta = 30'd0;
-reg [29:0] fft_bars_r_display = 30'd0;
+wire signed [15:0] spectrum_sample_l;
+wire signed [15:0] spectrum_sample_r;
+wire spectrum_sample_strobe;
 
 pll_96m pll (
     .clk_12m(i_clk),
@@ -385,7 +382,10 @@ cpu_subsystem cpu_system (
     .i_sample_l(sample_l),
     .i_sample_r(sample_r),
     .o_booted(cpu_booted),
-    .o_trap(cpu_trap)
+    .o_trap(cpu_trap),
+    .o_spectrum_sample_l(spectrum_sample_l),
+    .o_spectrum_sample_r(spectrum_sample_r),
+    .o_spectrum_sample_strobe(spectrum_sample_strobe)
 );
 
 always @(posedge clk_sys) begin
@@ -410,26 +410,17 @@ always @(posedge clk_sys) begin
 
 end
 
-always @(posedge clk_sys) begin
-    fifo_level_meta <= fifo_level;
-    fifo_level_display <= fifo_level_meta;
-    fft_bars_l_meta <= fft_bars_l;
-    fft_bars_l_display <= fft_bars_l_meta;
-    fft_bars_r_meta <= fft_bars_r;
-    fft_bars_r_display <= fft_bars_r_meta;
-end
-
 audio_spectrum_bands spectrum_l (
     .i_clk(clk_sys),
-    .i_strobe(sample_req),
-    .i_sample(raw_audio_l),
+    .i_strobe(spectrum_sample_strobe),
+    .i_sample(spectrum_sample_l),
     .o_bars(fft_bars_l)
 );
 
 audio_spectrum_bands spectrum_r (
     .i_clk(clk_sys),
-    .i_strobe(sample_req),
-    .i_sample(raw_audio_r),
+    .i_strobe(spectrum_sample_strobe),
+    .i_sample(spectrum_sample_r),
     .o_bars(fft_bars_r)
 );
 
@@ -498,8 +489,8 @@ hcms29xx_fft_display #(
     .CLOCK_DIVIDER(80)
 ) u_display (
     .i_clk(clk_sys),
-    .i_bars_l(fft_bars_l_display),
-    .i_bars_r(fft_bars_r_display),
+    .i_bars_l(fft_bars_l),
+    .i_bars_r(fft_bars_r),
     .i_pwm(4'b1101),
     .i_current(2'b00),
     .i_sleep(1'b1),

@@ -18,7 +18,10 @@ module wishbone_audio_rx #(
     output reg [31:0] o_wb_dat = 0,
     output reg o_wb_ack = 0,
     output wire o_wb_err,
-    output wire [31:0] o_scratch
+    output wire [31:0] o_scratch,
+    output wire signed [15:0] o_spectrum_sample_l,
+    output wire signed [15:0] o_spectrum_sample_r,
+    output reg o_spectrum_sample_strobe = 0
 );
     localparam [31:0] DEVICE_ID = 32'h49434542;
     localparam integer POINTER_BITS = ADDRESS_BITS + 1;
@@ -37,6 +40,11 @@ module wishbone_audio_rx #(
     reg overflow_wb = 0;
     reg [31:0] scratch = 0;
     reg data_read_pending = 0;
+    reg [31:0] spectrum_sample = 0;
+    reg spectrum_toggle = 0;
+    reg spectrum_toggle_meta = 0;
+    reg spectrum_toggle_audio = 0;
+    reg spectrum_toggle_seen = 0;
 
     wire request = i_wb_cyc && i_wb_stb;
     wire push = i_sample_strobe && !full;
@@ -58,6 +66,8 @@ module wishbone_audio_rx #(
 
     assign o_wb_err = 1'b0;
     assign o_scratch = scratch;
+    assign o_spectrum_sample_l = spectrum_sample[31:16];
+    assign o_spectrum_sample_r = spectrum_sample[15:0];
 
     SB_RAM40_4K #(
         .READ_MODE(0),
@@ -101,10 +111,22 @@ module wishbone_audio_rx #(
             read_gray_audio <= 0;
             overflow <= 0;
             full <= 0;
+            spectrum_toggle_meta <= 0;
+            spectrum_toggle_audio <= 0;
+            spectrum_toggle_seen <= 0;
+            o_spectrum_sample_strobe <= 0;
         end else begin
             read_gray_audio_meta <= read_gray;
             read_gray_audio <= read_gray_audio_meta;
             full <= full_next;
+            spectrum_toggle_meta <= spectrum_toggle;
+            spectrum_toggle_audio <= spectrum_toggle_meta;
+            o_spectrum_sample_strobe <= 0;
+
+            if (spectrum_toggle_audio != spectrum_toggle_seen) begin
+                spectrum_toggle_seen <= spectrum_toggle_audio;
+                o_spectrum_sample_strobe <= 1'b1;
+            end
 
             if (push) begin
                 write_binary <= write_binary_next;
@@ -127,6 +149,8 @@ module wishbone_audio_rx #(
             o_wb_dat <= 0;
             o_wb_ack <= 0;
             data_read_pending <= 0;
+            spectrum_sample <= 0;
+            spectrum_toggle <= 0;
         end else begin
             write_gray_wb_meta <= write_gray;
             write_gray_wb <= write_gray_wb_meta;
@@ -142,10 +166,10 @@ module wishbone_audio_rx #(
                 read_gray <= read_gray_next;
             end else if (request && !o_wb_ack) begin
                 o_wb_ack <= 1'b1;
-                case (i_wb_adr[3:2])
-                    2'd0: o_wb_dat <= DEVICE_ID;
-                    2'd1: o_wb_dat <= {30'd0, overflow_wb, !empty};
-                    2'd2: begin
+                case (i_wb_adr[4:2])
+                    3'd0: o_wb_dat <= DEVICE_ID;
+                    3'd1: o_wb_dat <= {30'd0, overflow_wb, !empty};
+                    3'd2: begin
                         if (!empty) begin
                             o_wb_ack <= 1'b0;
                             data_read_pending <= 1'b1;
@@ -153,7 +177,7 @@ module wishbone_audio_rx #(
                             o_wb_dat <= 0;
                         end
                     end
-                    default: begin
+                    3'd3: begin
                         o_wb_dat <= scratch;
                         if (i_wb_we) begin
                             if (i_wb_sel[0]) scratch[7:0] <= i_wb_dat[7:0];
@@ -162,6 +186,14 @@ module wishbone_audio_rx #(
                             if (i_wb_sel[3]) scratch[31:24] <= i_wb_dat[31:24];
                         end
                     end
+                    3'd4: begin
+                        o_wb_dat <= spectrum_sample;
+                        if (i_wb_we) begin
+                            spectrum_sample <= i_wb_dat;
+                            spectrum_toggle <= ~spectrum_toggle;
+                        end
+                    end
+                    default: o_wb_dat <= 0;
                 endcase
             end
         end

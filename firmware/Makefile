@@ -16,6 +16,8 @@ firmware.elf: main.c linker.ld
 firmware.hex: firmware.elf
 	$(OBJCOPY) -O verilog --verilog-data-width=4 $< $@
 	tr -d '\r' < $@ > $@.tmp && mv $@.tmp $@
+	rm -f ../_build/default/hardware.json ../_build/default/hardware.asc
+	rm -f ../_build/default/hardware.bin ../_build/default/hardware.pnr
 
 clean:
 	rm -f firmware.elf firmware.hex
