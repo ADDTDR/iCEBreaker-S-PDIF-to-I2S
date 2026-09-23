@@ -26,7 +26,7 @@ void _start(void)
     }
 
     SCRATCH = 0xb007c0deu;
-    SCRATCH = 0x00000000u;
+
     for (;;) {
         if (RX_STATUS & RX_NOT_EMPTY) {
             last_received_sample = RX_DATA;
