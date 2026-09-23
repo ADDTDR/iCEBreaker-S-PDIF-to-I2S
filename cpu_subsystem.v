@@ -36,6 +36,11 @@ endmodule
 module cpu_subsystem (
     input wire i_clk,
     input wire i_reset,
+    input wire i_audio_clk,
+    input wire i_audio_reset,
+    input wire i_sample_strobe,
+    input wire signed [15:0] i_sample_l,
+    input wire signed [15:0] i_sample_r,
     output wire o_booted,
     output wire o_trap
 );
@@ -144,9 +149,14 @@ module cpu_subsystem (
         .i_s_err(slave_error)
     );
 
-    wishbone_scratch scratch (
-        .i_clk(i_clk),
-        .i_reset(i_reset),
+    wishbone_audio_rx audio_rx (
+        .i_audio_clk(i_audio_clk),
+        .i_audio_reset(i_audio_reset),
+        .i_sample_strobe(i_sample_strobe),
+        .i_sample_l(i_sample_l),
+        .i_sample_r(i_sample_r),
+        .i_wb_clk(i_clk),
+        .i_wb_reset(i_reset),
         .i_wb_adr(slave_address),
         .i_wb_dat(slave_write_data),
         .i_wb_sel(slave_select),

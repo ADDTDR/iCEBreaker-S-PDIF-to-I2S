@@ -1,23 +1,3 @@
-
- module tone_rom #(
-     parameter INIT_FILE = "mem_init.txt"
- )(
-     input wire clk,
-     input wire [9:0] addr,
-     output reg signed [15:0] data
- );
-     reg signed [15:0] mem [0:1023];
-
-     always @(posedge clk) begin
-         data <= mem[addr];
-     end
-
-     initial if (INIT_FILE) begin
-         $readmemh(INIT_FILE, mem);
-     end
- endmodule
-
-
  module i2s_tx #(
      parameter integer SAMPLE_BITS = 16,
      parameter integer CHANNEL_BITS = 32,
@@ -366,10 +346,6 @@ wire sample_strobe;
 wire spdif_active;
 wire spdif_locked;
 
-reg [9:0] sample_addr = 10'd0;
-reg signed [15:0] sample_fallback = 16'sd0;
-wire signed [15:0] rom_sample;
-
 wire sample_req;
 wire signed [15:0] recovered_sample_l;
 wire signed [15:0] recovered_sample_r;
@@ -403,6 +379,11 @@ pll_96m pll (
 cpu_subsystem cpu_system (
     .i_clk(cpu_clk),
     .i_reset(!pll_lock),
+    .i_audio_clk(clk_sys),
+    .i_audio_reset(!system_ready),
+    .i_sample_strobe(sample_strobe),
+    .i_sample_l(sample_l),
+    .i_sample_r(sample_r),
     .o_booted(cpu_booted),
     .o_trap(cpu_trap)
 );
@@ -427,10 +408,6 @@ always @(posedge clk_sys) begin
     else if (dbg_hold != 0)
         dbg_hold <= dbg_hold - 1'b1;
 
-    if (sample_req) begin
-        sample_fallback <= rom_sample;
-        sample_addr <= sample_addr + 1'b1;
-    end
 end
 
 always @(posedge clk_sys) begin
@@ -454,14 +431,6 @@ audio_spectrum_bands spectrum_r (
     .i_strobe(sample_req),
     .i_sample(raw_audio_r),
     .o_bars(fft_bars_r)
-);
-
-tone_rom #(
-    .INIT_FILE("mem_init.txt")
-) rom (
-    .clk(clk_sys),
-    .addr(sample_addr),
-    .data(rom_sample)
 );
 
 spdif_rx rx (
@@ -493,8 +462,8 @@ audio_clock_recovery #(
 
 assign MCLK = 1'b0;
 
-assign raw_audio_l = audio_valid ? recovered_sample_l : sample_fallback;
-assign raw_audio_r = audio_valid ? recovered_sample_r : sample_fallback;
+assign raw_audio_l = audio_valid ? recovered_sample_l : 16'sd0;
+assign raw_audio_r = audio_valid ? recovered_sample_r : 16'sd0;
 
 
 i2s_tx i2s (

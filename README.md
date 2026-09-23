@@ -33,16 +33,17 @@ the one-system-clock quantization jitter inherent in an FPGA NCO.
 
 ## Spectrum Display
 
-An HCMS-29xx four-character dot-matrix display shows a 20-bar stereo spectrum:
-10 bars for the left channel in the first two characters and 10 bars for the
-right channel in the last two. Each bar is seven dots high and grows upward
-from the bottom row.
+An HCMS-29xx four-character dot-matrix display shows a five-band stereo
+spectrum. The left channel uses the first two characters and the right channel
+uses the last two. Each band is two columns wide, seven dots high, and grows
+upward from the bottom row.
 
 This is not a literal FFT. It
 uses a compact, FPGA-friendly filter bank implemented by `audio_spectrum_bands`:
 
-- Each channel feeds ten cascaded 24-bit one-pole low-pass stages at the I2S
-	sample request rate.
+- Each channel stores five cascaded 24-bit one-pole low-pass stages. One shared,
+	pipelined datapath updates them sequentially during the idle clocks between
+	I2S sample requests.
 - The difference between adjacent low-pass stages forms a progressively lower
 	frequency band; the final stage supplies the lowest-frequency band.
 - The absolute value of each band drives a 16-bit envelope. It rises
@@ -51,12 +52,51 @@ uses a compact, FPGA-friendly filter bank implemented by `audio_spectrum_bands`:
 	levels (zero through seven), which becomes the visible bar height.
 
 The display analyzes the samples currently presented to the I2S transmitter.
-It therefore follows recovered S/PDIF audio when locked and shows the fallback
-ROM tone when no valid input is available. The bar values cross from the 96 MHz
-audio clock into a divided HCMS display clock through two register stages.
+It therefore follows recovered S/PDIF audio when locked and shows silence when
+no valid input is available. The bar values cross from the 96 MHz analyzer into
+the HCMS frame registers in the same clock domain.
 
 The bands are useful as a low-cost visual spectrum indicator, not as
 calibrated FFT bins or a precision audio analyzer.
+
+Sequential processing avoids parallel arithmetic datapaths. At 96 kHz it
+finishes all five bands in 20 of the roughly 1,000 available 96 MHz clocks per
+audio sample.
+
+## Wishbone Peripheral Bus
+
+The first CPU integration stage provides a 32-bit, single-master Wishbone
+Classic peripheral bus. Four 4 KB slots are reserved:
+
+| Address range | Planned peripheral |
+| --- | --- |
+| `0x10000000` - `0x10000fff` | S/PDIF receive FIFO |
+| `0x10001000` - `0x10001fff` | I2S transmit FIFO |
+| `0x10002000` - `0x10002fff` | Spectrum analyzer |
+| `0x10003000` - `0x10003fff` | HCMS display |
+
+During bus bring-up, slot zero contains an ID register at offset `0x00` and a
+byte-writable scratch register at offset `0x04`. Disabled or out-of-range
+accesses complete with both `ACK` and `ERR`, preventing a software bus hang.
+
+## RISC-V CPU
+
+A minimum-area PicoRV32 configuration runs RV32E firmware at 12 MHz from a
+4 KB unified program/data block RAM. Counters, interrupts, multiplication,
+division, compressed instructions, and the upper 16 registers are disabled.
+The vendored `picorv32.v` is the source distributed with the APIO OSS CAD
+Suite.
+
+The initial freestanding C firmware reads the Wishbone device ID, writes and
+reads back the scratch register, then writes `0xb007c0de` as its boot-success
+signature. Rebuild the checked-in BRAM image with:
+
+```sh
+make -C firmware
+```
+
+This requires `riscv64-elf-gcc` and `riscv64-elf-objcopy`; on macOS they are
+provided by the Homebrew `riscv64-elf-gcc` formula.
 
 ## Connections
 
@@ -99,18 +139,21 @@ The onboard LEDs are active-low.
 
 | Green | Red | Meaning |
 | --- | --- | --- |
-| On | Off | Recent valid S/PDIF samples are being sent to the DAC |
-| Off | On | Input transitions are present, but valid audio is not decoding |
-| Off | Off | No S/PDIF carrier/activity detected; fallback tone is selected |
+| On | Off | CPU firmware booted; no audio error is active |
+| On | On | CPU booted; input is active but valid audio is not decoding |
+| Off | On | CPU trapped, or input is active without valid decoded audio |
+| Off | Off | CPU has not completed boot |
 
 PMOD 1B pin 2 is high while the receiver is locked or shortly after a valid
 stereo frame.
 
 ## Build and Upload
 
-Install APIO with the `icebreaker` board support, then run:
+Install APIO with the `icebreaker` board support and build the firmware, then
+run:
 
 ```sh
+make -C firmware
 apio test
 apio build
 apio upload

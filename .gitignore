@@ -1,0 +1,12 @@
+# APIO/Yosys/nextpnr build products
+_build/
+
+# Simulation waveforms
+*.vcd
+*.fst
+
+# Firmware intermediate; firmware.hex is a required synthesis input
+firmware/*.elf
+
+# macOS metadata
+.DS_Store
