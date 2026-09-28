@@ -1,0 +1,4 @@
+make -C firmware
+apio test
+apio build
+apio upload

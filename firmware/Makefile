@@ -1,4 +1,5 @@
 RISCV_PREFIX ?= riscv64-elf-
+INVALIDATE_APIO ?= 1
 CC := $(RISCV_PREFIX)gcc
 OBJCOPY := $(RISCV_PREFIX)objcopy
 
@@ -16,8 +17,8 @@ firmware.elf: main.c linker.ld
 firmware.hex: firmware.elf
 	$(OBJCOPY) -O verilog --verilog-data-width=4 $< $@
 	tr -d '\r' < $@ > $@.tmp && mv $@.tmp $@
-	rm -f ../_build/default/hardware.json ../_build/default/hardware.asc
-	rm -f ../_build/default/hardware.bin ../_build/default/hardware.pnr
+	@if [ "$(INVALIDATE_APIO)" != "0" ]; then rm -f ../_build/default/hardware.json ../_build/default/hardware.asc; fi
+	@if [ "$(INVALIDATE_APIO)" != "0" ]; then rm -f ../_build/default/hardware.bin ../_build/default/hardware.pnr; fi
 
 clean:
 	rm -f firmware.elf firmware.hex

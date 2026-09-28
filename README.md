@@ -173,8 +173,7 @@ stereo frame.
 
 ## Build and Upload
 
-Install APIO with the `icebreaker` board support and build the firmware, then
-run:
+Install APIO with the `icebreaker` board support. For a normal FPGA build, run:
 
 ```sh
 make -C firmware
@@ -182,3 +181,15 @@ apio test
 apio build
 apio upload
 ```
+
+For C-only changes, compile, patch the firmware block RAM in the existing
+placed design, and upload it with:
+
+```sh
+./deploy_firmware.sh
+```
+
+The first invocation creates a base FPGA image with a full APIO build.
+Subsequent invocations skip synthesis and place-and-route. Run a normal build
+after changing Verilog, constraints, or APIO configuration; the next firmware
+deployment will perform one full build to establish a new base.
