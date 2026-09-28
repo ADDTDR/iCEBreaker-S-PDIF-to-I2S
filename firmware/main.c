@@ -25,7 +25,7 @@ void _start(void)
         for (;;) {}
     }
 
-    SCRATCH = 0xb007c0deu;
+    SCRATCH = 0x00000000u;
 
     for (;;) {
         if (RX_STATUS & RX_NOT_EMPTY) {
