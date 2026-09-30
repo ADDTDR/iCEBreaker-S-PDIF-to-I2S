@@ -5,8 +5,11 @@
 #define RX_DATA (*(volatile uint32_t *)0x10000008u)
 #define SCRATCH (*(volatile uint32_t *)0x1000000cu)
 #define SPECTRUM_DATA (*(volatile uint32_t *)0x10000010u)
+#define TX_STATUS (*(volatile uint32_t *)0x10001004u)
+#define TX_DATA (*(volatile uint32_t *)0x10001008u)
 
 #define RX_NOT_EMPTY 0x00000001u
+#define TX_NOT_FULL 0x00000001u
 
 static volatile uint32_t last_received_sample;
 
@@ -28,9 +31,10 @@ void _start(void)
     SCRATCH = 0x00000000u;
 
     for (;;) {
-        if (RX_STATUS & RX_NOT_EMPTY) {
+        if ((RX_STATUS & RX_NOT_EMPTY) && (TX_STATUS & TX_NOT_FULL)) {
             last_received_sample = RX_DATA;
             SPECTRUM_DATA = last_received_sample;
+            TX_DATA = last_received_sample;
         }
     }
 }

@@ -347,14 +347,13 @@ wire spdif_active;
 wire spdif_locked;
 
 wire sample_req;
-wire signed [15:0] recovered_sample_l;
-wire signed [15:0] recovered_sample_r;
+wire signed [15:0] cpu_sample_l;
+wire signed [15:0] cpu_sample_r;
 wire signed [31:0] rate_adjust;
-wire recovery_ready;
-wire [5:0] fifo_level;
+wire i2s_ready;
 wire receiver_timed_out = rx_watchdog >= 24'd4800000;
 wire system_ready = pll_lock_sync[1];
-wire audio_valid = system_ready && spdif_active && !receiver_timed_out && recovery_ready;
+wire audio_valid = system_ready && spdif_active && !receiver_timed_out && i2s_ready;
 
 reg [1:0] cpu_clock_divider = 2'd0;
 reg cpu_clk = 1'b0;
@@ -383,6 +382,11 @@ cpu_subsystem cpu_system (
     .i_sample_r(sample_r),
     .o_booted(cpu_booted),
     .o_trap(cpu_trap),
+    .i_i2s_sample_req(sample_req),
+    .o_i2s_sample_l(cpu_sample_l),
+    .o_i2s_sample_r(cpu_sample_r),
+    .o_i2s_rate_adjust(rate_adjust),
+    .o_i2s_ready(i2s_ready),
     .o_spectrum_sample_l(spectrum_sample_l),
     .o_spectrum_sample_r(spectrum_sample_r),
     .o_spectrum_sample_strobe(spectrum_sample_strobe)
@@ -434,27 +438,10 @@ spdif_rx rx (
     .locked(spdif_locked)
 );
 
-audio_clock_recovery #(
-    .FIFO_DEPTH(32),
-    .FIFO_ADDR_BITS(5)
-) recovery (
-    .clk(clk_sys),
-    .reset(!system_ready || receiver_timed_out),
-    .sample_strobe(sample_strobe),
-    .sample_l_in(sample_l),
-    .sample_r_in(sample_r),
-    .sample_req(sample_req),
-    .sample_l_out(recovered_sample_l),
-    .sample_r_out(recovered_sample_r),
-    .rate_adjust(rate_adjust),
-    .ready(recovery_ready),
-    .level(fifo_level)
-);
-
 assign MCLK = 1'b0;
 
-assign raw_audio_l = audio_valid ? recovered_sample_l : 16'sd0;
-assign raw_audio_r = audio_valid ? recovered_sample_r : 16'sd0;
+assign raw_audio_l = audio_valid ? cpu_sample_l : 16'sd0;
+assign raw_audio_r = audio_valid ? cpu_sample_r : 16'sd0;
 
 
 i2s_tx i2s (

@@ -85,6 +85,14 @@ The implemented receive peripheral registers are:
 | `0x1000000c` | Read/write | Boot-test scratch register |
 | `0x10000010` | Read/write | Spectrum sample mailbox |
 
+The implemented I2S transmit peripheral registers are:
+
+| Address | Access | Function |
+| --- | --- | --- |
+| `0x10001000` | Read | Device ID, `0x49325354` (`I2ST`) |
+| `0x10001004` | Read | Bit 0: TX not full; bit 1: TX underflow |
+| `0x10001008` | Write | Push packed `{left[15:0], right[15:0]}` sample |
+
 Disabled or out-of-range Wishbone slots complete with both `ACK` and `ERR`,
 preventing a software bus hang.
 
@@ -103,11 +111,10 @@ scratch failure, then stops. On success it clears the scratch register, so the
 firmware briefly writes the `0xb007c0de` boot signature and then clears it, so
 the green boot indicator remains off during normal operation.
 
-The main polling loop tests bit 0 of `RX_STATUS` (`RX_NOT_EMPTY`). When a stereo
-frame is available, reading `RX_DATA` removes it from the receive FIFO and the
-firmware writes that packed frame to `SPECTRUM_DATA`. This makes the spectrum
-analyzer and display depend on the CPU transport path, while I2S playback stays
-in hardware.
+The main polling loop waits for both an available receive frame and space in the
+I2S transmit FIFO. It removes the packed stereo frame from `RX_DATA`, then writes
+it to both `SPECTRUM_DATA` and `TX_DATA`. The spectrum analyzer, display, and I2S
+playback therefore all depend on the CPU transport path.
 
 Rebuild the checked-in BRAM image with:
 

@@ -43,6 +43,11 @@ module cpu_subsystem (
     input wire signed [15:0] i_sample_r,
     output wire o_booted,
     output wire o_trap,
+    input wire i_i2s_sample_req,
+    output wire signed [15:0] o_i2s_sample_l,
+    output wire signed [15:0] o_i2s_sample_r,
+    output wire signed [31:0] o_i2s_rate_adjust,
+    output wire o_i2s_ready,
     output wire signed [15:0] o_spectrum_sample_l,
     output wire signed [15:0] o_spectrum_sample_r,
     output wire o_spectrum_sample_strobe
@@ -75,10 +80,13 @@ module cpu_subsystem (
     wire scratch_ack;
     wire scratch_error;
     wire [31:0] scratch_value;
+    wire [31:0] i2s_read_data;
+    wire i2s_ack;
+    wire i2s_error;
 
-    wire [127:0] slave_read_data = {96'd0, scratch_read_data};
-    wire [3:0] slave_ack = {3'b000, scratch_ack};
-    wire [3:0] slave_error = {3'b000, scratch_error};
+    wire [127:0] slave_read_data = {64'd0, i2s_read_data, scratch_read_data};
+    wire [3:0] slave_ack = {2'b00, i2s_ack, scratch_ack};
+    wire [3:0] slave_error = {2'b00, i2s_error, scratch_error};
 
     assign master_read_data = memory_selected ? memory_read_data : peripheral_read_data;
     assign master_ack = memory_selected ? memory_ack : peripheral_ack;
@@ -130,7 +138,7 @@ module cpu_subsystem (
     );
 
     wishbone_interconnect #(
-        .SLAVE_ENABLE(4'b0001)
+        .SLAVE_ENABLE(4'b0011)
     ) peripheral_bus (
         .i_m_adr(master_address),
         .i_m_dat(master_write_data),
@@ -173,5 +181,26 @@ module cpu_subsystem (
         .o_spectrum_sample_l(o_spectrum_sample_l),
         .o_spectrum_sample_r(o_spectrum_sample_r),
         .o_spectrum_sample_strobe(o_spectrum_sample_strobe)
+    );
+
+    wishbone_audio_tx audio_tx (
+        .i_wb_clk(i_clk),
+        .i_wb_reset(i_reset),
+        .i_wb_adr(slave_address),
+        .i_wb_dat(slave_write_data),
+        .i_wb_sel(slave_select),
+        .i_wb_we(slave_write_enable),
+        .i_wb_cyc(slave_cycle[1]),
+        .i_wb_stb(slave_strobe[1]),
+        .o_wb_dat(i2s_read_data),
+        .o_wb_ack(i2s_ack),
+        .o_wb_err(i2s_error),
+        .i_audio_clk(i_audio_clk),
+        .i_audio_reset(i_audio_reset),
+        .i_sample_req(i_i2s_sample_req),
+        .o_sample_l(o_i2s_sample_l),
+        .o_sample_r(o_i2s_sample_r),
+        .o_rate_adjust(o_i2s_rate_adjust),
+        .o_ready(o_i2s_ready)
     );
 endmodule
